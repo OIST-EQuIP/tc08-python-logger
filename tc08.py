@@ -159,20 +159,18 @@ class MainWindow(QtWidgets.QMainWindow):
         # finalize config initialization
         while self.DEV_HANDLE <= 0:
             self.DEV_HANDLE = tc08.usb_tc08_open_unit()
+            msg_box = QtWidgets.QMessageBox()
+            msg_box.setWindowTitle("Device Issue")
+            msg_box.setStandardButtons(
+                QtWidgets.QMessageBox.Retry | QtWidgets.QMessageBox.Close
+            )
             if self.DEV_HANDLE == 0:
-                msg_box = QtWidgets.QMessageBox()
-                msg_box.setWindowTitle("Device Issue")
                 msg_box.setText("TC-08 not found. Please reconnect and try again.")
-                msg_box.setStandardButtons(QtWidgets.QMessageBox.Retry)
-                msg_box.exec()
             elif self.DEV_HANDLE == -1:
-                msg_box = QtWidgets.QMessageBox()
-                msg_box.setWindowTitle("Device Issue")
-                msg_box.setText(
-                    f"{tc08.usb_tc08_get_last_error(0)}. Please fix the issue and try again."
-                )
-                msg_box.setStandardButtons(QtWidgets.QMessageBox.Retry)
-                msg_box.exec()
+                msg_box.setText(f"TC-08 error: {tc08.usb_tc08_get_last_error(0)}")
+            if msg_box.exec() == QtWidgets.QMessageBox.Close:
+                self.close()
+                sys.exit(0)
         tc08.usb_tc08_set_mains(self.DEV_HANDLE, 0)
         self.restore_last()
 
@@ -183,8 +181,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.load(f.readline())
 
     def closeEvent(self, event) -> None:
-        tc08.usb_tc08_stop(self.DEV_HANDLE)
-        tc08.usb_tc08_close_unit(self.DEV_HANDLE)
+        if self.DEV_HANDLE:
+            tc08.usb_tc08_stop(self.DEV_HANDLE)
+            tc08.usb_tc08_close_unit(self.DEV_HANDLE)
         event.accept()
 
     def load(self, load_file=None) -> None:

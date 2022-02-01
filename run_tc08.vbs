@@ -1,0 +1,1 @@
+CreateObject("Wscript.Shell").Run "run_tc08.bat", 0, True
