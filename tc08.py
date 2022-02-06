@@ -159,18 +159,19 @@ class MainWindow(QtWidgets.QMainWindow):
         # finalize config initialization
         while self.DEV_HANDLE <= 0:
             self.DEV_HANDLE = tc08.usb_tc08_open_unit()
-            msg_box = QtWidgets.QMessageBox()
-            msg_box.setWindowTitle("Device Issue")
-            msg_box.setStandardButtons(
-                QtWidgets.QMessageBox.Retry | QtWidgets.QMessageBox.Close
-            )
-            if self.DEV_HANDLE == 0:
-                msg_box.setText("TC-08 not found. Please reconnect and try again.")
-            elif self.DEV_HANDLE == -1:
-                msg_box.setText(f"TC-08 error: {tc08.usb_tc08_get_last_error(0)}")
-            if msg_box.exec() == QtWidgets.QMessageBox.Close:
-                self.close()
-                sys.exit(0)
+            if self.DEV_HANDLE <= 0:
+                msg_box = QtWidgets.QMessageBox()
+                msg_box.setWindowTitle("Device Issue")
+                msg_box.setStandardButtons(
+                    QtWidgets.QMessageBox.Retry | QtWidgets.QMessageBox.Close
+                )
+                if self.DEV_HANDLE == 0:
+                    msg_box.setText("TC-08 not found. Please reconnect and try again.")
+                elif self.DEV_HANDLE == -1:
+                    msg_box.setText(f"TC-08 error: {tc08.usb_tc08_get_last_error(0)}")
+                if msg_box.exec() == QtWidgets.QMessageBox.Close:
+                    self.close()
+                    sys.exit(0)
         tc08.usb_tc08_set_mains(self.DEV_HANDLE, 0)
         self.restore_last()
 
@@ -195,6 +196,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Comma-Separated Values File (*.csv)",
             )
         elif not exists(load_file):
+            print(f"File {load_file} does not exists")
             return
 
         if load_file:
@@ -202,23 +204,26 @@ class MainWindow(QtWidgets.QMainWindow):
                 line = f.readline()
                 while line[0] == "#":
                     if "#Dir" in line:
-                        self.save_dir = line.rsplit(maxsplit=2)[1]
+                        prev_save_dir = line.split()[1]
+                        if exists(prev_save_dir):
+                            self.save_dir = prev_save_dir
                     elif "#Samp" in line:
-                        self.samp_int = int(line.rsplit(maxsplit=2)[1])
+                        self.samp_int = int(line.rsplit(maxsplit=1)[1])
                     elif "#Therm" in line:
-                        self.tc_cb.setCurrentIndex(int(line.rsplit(maxsplit=2)[1]))
+                        self.tc_cb.setCurrentIndex(int(line.rsplit(maxsplit=1)[1]))
                     elif "#Ch" in line:
-                        elem = line.split(maxsplit=4)
+                        elem = line.split(maxsplit=3)
                         ch = int(elem[1])
                         dlg_config = elem[2]
+                        print(elem)
                         if self.ch_dialogs[ch] == None:
                             self.ch_dialogs[ch] = ChannelDialog(ch)
-                        self.ch_dialogs[ch].name_text.setText(elem[-1])
+                        self.ch_dialogs[ch].name_text.setText(elem[-1].strip())
                         if dlg_config[0] == "/":
-                            # channel off
+                            # channel off /->
                             self.ch_dialogs[ch].temp_text.setText(dlg_config[3:])
                         else:
-                            # channel on
+                            # channel on ->
                             self.CONTROLS[self.TC08_CH_ORDER.index(ch) + 3].toggle()
                             self.selected_ch.append(ch)
                             self.ch_dialogs[ch].temp_text.setText(dlg_config[2:])
@@ -318,10 +323,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 new_samp_int = max(self.samp_int, dev_min_int)
                 assert_pico2000_ok(tc08.usb_tc08_run(self.DEV_HANDLE, new_samp_int))
 
-                # initialize timer
-                self.timer.setInterval(new_samp_int * self.BUFFER_LEN)
-                print(f"sampling at {new_samp_int} ms")
-                self.mail_addresses = self.mail_text.toPlainText().split()
+            # initialize timer
+            self.timer.setInterval(new_samp_int * self.BUFFER_LEN)
+            print(f"sampling at {new_samp_int} ms")
+            self.mail_addresses = self.mail_text.toPlainText().split()
 
             if any(self.notify_at):
                 if self.mail_addresses:
