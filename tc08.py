@@ -527,6 +527,7 @@ class MailingThread(QtCore.QRunnable):
         self.mailer.mail_new()
         if self.plot:
             self.mail_compile()
+        self.mailer.mail_body(self.msg)
         self.mailer.mail_send()
 
     def mail_compile(self) -> None:
@@ -537,7 +538,6 @@ class MailingThread(QtCore.QRunnable):
         img.save(f, "PNG")
         f.seek(0)
         self.mailer.mail_attach(f.readAll(), f"{now()}.png")
-        self.mailer.mail_body(self.msg)
         f.close()
 
 
