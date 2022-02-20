@@ -1,5 +1,5 @@
 from ast import Try
-from datetime import datetime, timedelta, time
+from datetime import datetime
 from mailer import Mailer
 from os import makedirs
 from os.path import expanduser, join, realpath, dirname, exists
@@ -146,11 +146,25 @@ class MainWindow(QtWidgets.QMainWindow):
         main_layout.addLayout(panel_layout)
         main_layout.addWidget(self.plot_widget, 1)
 
-        # initialize threadpool
+        # initialize mail threadpool and makes it blocking
         self.pool = QtCore.QThreadPool()
+        self.pool.setMaxThreadCount(1)
 
         # initialize mailer
-        self.mailer = Mailer("Temperature Notification", "", "TC-08")
+        try:
+            self.mailer = Mailer(
+                f"Temperature Notification @ {now().split('-')[0]}", "", "TC-08"
+            )
+        except OSError:
+            msg_box = QtWidgets.QMessageBox()
+            msg_box.setWindowTitle("SMTP Configuration Issue")
+            msg_box.setStandardButtons(QtWidgets.QMessageBox.Close)
+            msg_box.setText(
+                "Check the README for more information on configuring the SMTP server."
+            )
+            if msg_box.exec() == QtWidgets.QMessageBox.Close:
+                self.close()
+                sys.exit(0)
 
         # initialize plot update timer
         self.timer = QtCore.QTimer()
@@ -319,9 +333,9 @@ class MainWindow(QtWidgets.QMainWindow):
                         self.THERMOCOUPLE[self.tc_cb.currentText()],
                     )
                 )
-                dev_min_int = tc08.usb_tc08_get_minimum_interval_ms(self.DEV_HANDLE)
-                new_samp_int = max(self.samp_int, dev_min_int)
-                assert_pico2000_ok(tc08.usb_tc08_run(self.DEV_HANDLE, new_samp_int))
+            dev_min_int = tc08.usb_tc08_get_minimum_interval_ms(self.DEV_HANDLE)
+            new_samp_int = max(self.samp_int, dev_min_int)
+            assert_pico2000_ok(tc08.usb_tc08_run(self.DEV_HANDLE, new_samp_int))
 
             # initialize timer
             self.timer.setInterval(new_samp_int * self.BUFFER_LEN)
@@ -331,6 +345,8 @@ class MainWindow(QtWidgets.QMainWindow):
             if any(self.notify_at):
                 if self.mail_addresses:
                     self.mailer.mail_new(mailto=self.mail_addresses)
+                    runnable = MailingThread(self.mailer, None, "Logging started")
+                    self.pool.start(runnable)
                 else:
                     msg_box = QtWidgets.QMessageBox()
                     msg_box.setWindowTitle("Inconsistency")
@@ -355,6 +371,8 @@ class MainWindow(QtWidgets.QMainWindow):
             self.output_csv()
             self.start_btn.setText("Start")
             self.timer.stop()
+            runnable = MailingThread(self.mailer, self.plot_widget, "Logging ended")
+            self.pool.start(runnable)
 
         self.started = ~self.started
 
@@ -409,6 +427,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def update_plot(self) -> None:
         self.time = self.time + [t / 1000 for t in self.time_buffer[: self.BUFFER_LEN]]
+        is_minute = round(self.time[-1]) % 60 == 0
         for i, ch in enumerate(self.selected_ch):
             tc08.usb_tc08_get_temp(
                 self.DEV_HANDLE,  # handle
@@ -427,11 +446,31 @@ class MainWindow(QtWidgets.QMainWindow):
             self.temp[i] = self.temp[i] + cur_temp
             self.curves[i].setData(self.time, self.temp[i])
 
+            if is_minute:
+                self.check_rapid_change(ch, self.temp[i])
+
+    def check_rapid_change(self, channel, temperature) -> None:
+        # warn when more than 1 deg celsius per minute
+        prev_idx = 60 * 1000 // self.timer.interval
+        if len(temperature) < prev_idx:
+            return
+
+        diff = temperature[-1] - temperature[-prev_idx]
+        if abs(diff) > 1:
+            ch_name = self.ch_dialogs[channel].name_text.text()
+            runnable = MailingThread(
+                self.mailer,
+                self.plot_widget,
+                f"{ch_name} temperature change by {diff}\u2103 in a minute",
+            )
+            self.pool.start(runnable)
+
     def notify(self, channel, temperature) -> None:
+        ch_name = self.ch_dialogs[channel].name_text.text()
         runnable = MailingThread(
             self.mailer,
             self.plot_widget,
-            f"{self.ch_dialogs[channel].name_text.text()} reached {temperature} \u2103",
+            f"{ch_name} reached {temperature}\u2103",
         )
         self.pool.start(runnable)
 

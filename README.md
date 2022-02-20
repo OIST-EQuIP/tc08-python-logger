@@ -4,7 +4,9 @@ TC-08 thermocouple data logger python implementation with notification mailing c
 
 # Requirements
 
-- pyqtgraph
+- numpy==1.20.3
+- PyQt5==5.15.6
+- pyqtgraph==0.12.3
 - [picosdk-python-wrappers](https://github.com/picotech/picosdk-python-wrappers)
 - [TC-08 PicoSDK](vhttps://www.picotech.com/downloads)
 
