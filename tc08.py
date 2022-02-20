@@ -451,7 +451,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def check_rapid_change(self, channel, temperature) -> None:
         # warn when more than 1 deg celsius per minute
-        prev_idx = 60 * 1000 // self.timer.interval
+        prev_idx = 60 * 1000 // self.timer.interval()
         if len(temperature) < prev_idx:
             return
 
@@ -525,7 +525,8 @@ class MailingThread(QtCore.QRunnable):
     @QtCore.pyqtSlot()
     def run(self) -> None:
         self.mailer.mail_new()
-        self.mail_compile()
+        if self.plot:
+            self.mail_compile()
         self.mailer.mail_send()
 
     def mail_compile(self) -> None:
